@@ -17,7 +17,7 @@ Below is the structure requiered for each stepper connected to the arduino. The 
 
 
 Here is what the default StepperConfig.ini looks like.
-'''ini
+```ini
 [Stepper1]
 steps_per_rev = 200
 range_of_motion = 1
@@ -34,4 +34,4 @@ invert_direction = False
 arduino_step_pin = 8
 arduino_direction_pin = 9
 arduino_enable_pin = 10
-'''
+```
