@@ -63,6 +63,7 @@ def generateStepperConfig():
 
         config['Stepper2'] = {'steps_per_rev': '200',
                             'range_of_motion': '1',
+                            'drive_reduction': '0.5',
                             'invert_direction': 'False',
                             'arduino_step_pin': '8',
                             'arduino_direction_pin': '9',

@@ -61,9 +61,6 @@ def validateSpeedValue():
 def manualSlideChange(event=None):
     for stepper in stepperSliders:
         sliderValue = float(stepperSliders[stepper].get())
-        
-
-
 
 
 
