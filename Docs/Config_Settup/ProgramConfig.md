@@ -17,8 +17,8 @@ The parameter order does not matter.
     * **log_file_size_limit: Sets max log file size in KB. Defaults to 20MB.**
 
 Here is what the default ProgramConfig.ini looks like.
-'''
+```ini
 [Logging]
 log_verbosity = DEBUG
 log_file_size_limit = 20000
-'''
+```
