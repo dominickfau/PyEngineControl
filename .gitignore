@@ -2,3 +2,6 @@ __pycache__/
 .vscode/
 pymata4_examples/
 Data/
+dist/
+build/
+*.spec
