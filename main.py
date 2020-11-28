@@ -26,6 +26,7 @@ LOGGING_CONFIG = configHelper.readConfigSection(PROGRAM_COFIG_FILE_NAME, 'Loggin
 defaultLogVerbosity = 'WARNING'
 try:
     ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, LOGGING_CONFIG['log_verbosity'])
+    defaultLogVerbosity = LOGGING_CONFIG['log_verbosity']
 except KeyError:
     ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, defaultLogVerbosity)
     ProgramLogger.warning(f"Config file: {PROGRAM_COFIG_FILE_NAME} missing key: log_verbosity. Defaulting to {defaultLogVerbosity}")
@@ -39,20 +40,23 @@ if int(LOGGING_CONFIG['log_file_size_limit']) < PROGRAM_LOG_FILE_SIZE:
         f.write("File cleared.\n\n")
     f.close()
 
-
 PROGAM_COFIGS = configHelper.readConfigFile(PROGRAM_COFIG_FILE_NAME)
 STEPPER_COFIGS = configHelper.readConfigFile(STEPPER_COFIG_FILE_NAME)
 STEPPER_OBJECTS = []
 
 #==================================TK ROOT WINDOW SETTUP==================================
 PROGRAM_NAME = codeUtilitys.amendSpacesToString("PyEngineControl")
+PROGRAM_VERSION = "0.0.1-alpha.1"
 SCREEN_WIDTH, SCREEN_HEIGHT = root.winfo_screenwidth(), root.winfo_screenheight()
 ROOT_WIDTH, ROOT_HIGHT = 600, 400
 x = (SCREEN_WIDTH/2) - (ROOT_WIDTH/2)
 y = (SCREEN_HEIGHT/2) - (ROOT_HIGHT/2)
 root.geometry("%dx%d+%d+%d" % (ROOT_WIDTH, ROOT_HIGHT, x, y))
 root.resizable(True, True)
-root.title(PROGRAM_NAME)
+root.title(f"{PROGRAM_NAME} [{PROGRAM_VERSION}]")
+ProgramLogger.setLevel('INFO')
+ProgramLogger.info(f"Program Version: {PROGRAM_VERSION}")
+ProgramLogger.setLevel(defaultLogVerbosity)
 
 
 #========================================METHODS==========================================

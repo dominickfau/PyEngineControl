@@ -80,7 +80,7 @@ def generateProgramConfig():
         config = configparser.ConfigParser()
 
         # Define sections with Key: Value pairs
-        config['Logging'] = {'log_verbosity': 'DEBUG',
+        config['Logging'] = {'log_verbosity': 'WARNING',
                             'log_file_size_limit': '20000'
                             }
 
