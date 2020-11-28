@@ -7,7 +7,6 @@ PROGRAM_COFIG_FILE_NAME = folderGenerator.findFullPath('Configs') + "ProgramConf
 PROGRAM_LOG_FILE_NAME = folderGenerator.findFullPath('Logs') + "ProgramLog.txt"
 
 
-
 def readConfigFile(cofigFileName):
     configData = {}
     config = configparser.ConfigParser()
@@ -53,7 +52,7 @@ def generateStepperConfig():
         config = configparser.ConfigParser()
 
         # Define sections with Key: Value pairs
-        config['Stepper1'] = {'steps_per_rev': '200',
+        config['StepperOne'] = {'steps_per_rev': '200',
                             'range_of_motion': '1',
                             'invert_direction': 'False',
                             'arduino_step_pin': '5',
@@ -61,9 +60,9 @@ def generateStepperConfig():
                             'arduino_enable_pin': '7'
                             }
 
-        config['Stepper2'] = {'steps_per_rev': '200',
+        config['StepperTwo'] = {'steps_per_rev': '200',
                             'range_of_motion': '1',
-                            'drive_reduction': '0.5',
+                            'drive_ratio': '0.5',
                             'invert_direction': 'False',
                             'arduino_step_pin': '8',
                             'arduino_direction_pin': '9',
@@ -85,7 +84,12 @@ def generateProgramConfig():
                             'log_file_size_limit': '20000'
                             }
 
+        config['GlobalStepperParms'] = {'inactivity_timeout': '200'
+                            }
+
 
         with open(PROGRAM_COFIG_FILE_NAME, 'w') as configfile:
             config.write(configfile)
         configfile.close()
+
+generateAllConfigs()

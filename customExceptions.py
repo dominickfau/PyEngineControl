@@ -5,3 +5,7 @@ class GeneralError(Exception):
 class NoSectionError(Exception):
     """Base class for other exceptions."""
     pass
+
+class OutOfRangeError(Exception):
+    """Base class for other exceptions."""
+    pass

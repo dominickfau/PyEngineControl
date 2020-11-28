@@ -1,9 +1,8 @@
 import os, csv
 
 PARENT_DIR = os.getcwd()
-# CSV_FILES = {'Employess': ['id', 'activeFlag', 'firstName', 'lastName', 'workingFlag'],
-#             'Bom': ['id', 'dateCreated', 'dateModified', 'partNum', 'partDescription', 'laborQty']
-#             }
+CSV_FILES = {'RunProgram': ['Line', 'MoveTo', 'HoldFor']
+            }
 
 CHILD_DIRS = {'Data': ['Logs', 'Configs', 'Templates']
             }
@@ -26,20 +25,15 @@ def generateFolders():
                     os.mkdir(childPath)
                 except FileExistsError:
                     pass
-                # if key == 'Data':
-                #     for csvKey in CSV_FILES:
-                #         csvFile = csvKey + ".csv"
-                #         fileToMake = os.path.join(childPath, csvFile)
-                #         if not os.path.isfile(fileToMake):
-                #             with open(fileToMake, 'w') as csvfile:
-                #                 csvwriter = csv.writer(csvfile)
-                #                 # Write Colunm names
-                #                 csvwriter.writerow(CSV_FILES[csvKey])
-                #         if folder == 'Templates':
-                #             with open(fileToMake, 'w') as csvfile:
-                #                 csvwriter = csv.writer(csvfile)
-                #                 # Write Colunm names
-                #                 csvwriter.writerow(CSV_FILES[csvKey])
+                if key == 'Data':
+                    for csvKey in CSV_FILES:
+                        csvFile = csvKey + ".csv"
+                        fileToMake = os.path.join(childPath, csvFile)
+                        if folder == 'Templates':
+                            with open(fileToMake, 'w') as csvfile:
+                                csvwriter = csv.writer(csvfile)
+                                # Write Colunm names
+                                csvwriter.writerow(CSV_FILES[csvKey])
 
 
 def getParentDir():
