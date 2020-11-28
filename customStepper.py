@@ -156,7 +156,9 @@ class CustomStepper(threading.Thread):
         if waitTime != None:
             ProgramLogger.info(f"[THREAD {threadName}] Holding for: {str(waitTime)} seconds")
             time.sleep(waitTime)
-        self.isInMotion = False
+            self.isInMotion = False
+        else:
+            self.isInMotion = False
 
 
 
@@ -194,12 +196,11 @@ class CustomStepper(threading.Thread):
         """
         ProgramLogger.info(f"[THREAD START] Started thread: {threadName}")
         while self.shutdown_flag == False:
-            if len(self.movmentQueue) != 0:
+            if len(self.movmentQueue) != 0 and self.isInMotion == False:
                 self.isInMotion = True
                 nextMove = self.movmentQueue.pop(0)
                 ProgramLogger.debug(f"[THREAD {threadName}] New movment: {str(nextMove[0])} Hold Time: {nextMove[1]}")
                 self.moveToPosition(threadName, newPosition=nextMove[0], waitTime=nextMove[1])
-                while self.isInMotion:
-                    time.sleep(0.0001)
-            else:
-                pass
+                while True:
+                    if not self.isInMotion:
+                        break
