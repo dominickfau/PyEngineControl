@@ -1,4 +1,4 @@
-import customExceptions, configparser, folderGenerator, configHelper, os, os.path
+import customExceptions, configparser, folderGenerator, configHelper, os, os.path, errno
 
 #========================================VARIABLES========================================
 STEPPER_COFIG_FILE_NAME = folderGenerator.findFullPath('Configs') + "StepperConfig.ini"
@@ -7,10 +7,24 @@ PROGRAM_COFIG_FILE_NAME = folderGenerator.findFullPath('Configs') + "ProgramConf
 PROGRAM_LOG_FILE_NAME = folderGenerator.findFullPath('Logs') + "ProgramLog.txt"
 
 
-def readConfigFile(cofigFileName):
+def readConfigFile(cofigFilePath):
+    """Reads entire config file, parses and returns a dictionary object.
+
+    Args:
+        cofigFileName (string): Full file path to config file to read from.
+    
+    Raises:
+        FileNotFoundError: Raised if the specified file does not exist.
+
+    Returns:
+       dictionary : All sections, items, and values in a format like this
+                    {sectionName: {item: value, ...}, ...}
+    """
+    if not os.path.isfile(cofigFilePath):
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), cofigFilePath)
     configData = {}
     config = configparser.ConfigParser()
-    config.read(cofigFileName)
+    config.read(cofigFilePath)
     for sect in config.sections():
         item = {}
         for k,v in config.items(sect):
@@ -19,35 +33,67 @@ def readConfigFile(cofigFileName):
     return configData
 
 
-def readConfigSection(cofigFileName, section):
+def readConfigSection(cofigFilePath, section):
+    """Reads specific config file section, parses and returns a dictionary object.
+
+    Args:
+        cofigFilePath (string): Full file path to config file to read from.
+        section (string): Name of section to return data from.
+
+    Raises:
+        FileNotFoundError: Raised if the specified file does not exist.
+        customExceptions.NoSectionError: Raised if specified section does not exist.
+
+    Returns:
+        dictionary : item: value for each item in the section.
+    """
+    if not os.path.isfile(cofigFilePath):
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), cofigFilePath)
     config = configparser.ConfigParser()
-    config.read(cofigFileName)
+    config.read(cofigFilePath)
     sectionOptions= {}
     if config.has_section(section):
         items = config.items(section)
         for item in items:
             sectionOptions[item[0]] = item[1]
     else:
-        raise customExceptions.NoSectionError('Section: [{0}] not found in Config File: [{1}]'.format(section, cofigFileName))
-    return sectionOptions # Return a dictionary of the section options
+        raise customExceptions.NoSectionError('Section: [{0}] not found in Config File: [{1}]'.format(section, cofigFilePath))
+    return sectionOptions
 
 
-def updateConfigSection(cofigFileName, section, key, value):
+def updateConfigSection(cofigFilePath, section, key, value):
+    """Updates the specific config file section.
+
+    Args:
+        cofigFilePath (string): Full file path to config file to read from.
+        section (string): Name of section where key is found.
+        key (string): Key name to update.
+        value (string): New value for the key.
+
+    Raises:
+        FileNotFoundError: Raised if the specified file does not exist.
+    """
+    if not os.path.isfile(cofigFilePath):
+        raise FileNotFoundError(errno.ENOENT, os.strerror(errno.ENOENT), cofigFilePath)
     config = configparser.ConfigParser()
-    config.read(cofigFileName)
+    config.read(cofigFilePath)
     config.set(section, key, value)
-    with open(cofigFileName, 'w') as configfile:
+    with open(cofigFilePath, 'w') as configfile:
         config.write(configfile)
     configfile.close()
     return
 
 
 def generateAllConfigs():
+    """Call this method to check for and generate all config files needed.
+    """
     generateStepperConfig()
     generateProgramConfig()
 
 
 def generateStepperConfig():
+    """Checks if stepper config file exists, if not create and fill with default data.
+    """
     if not os.path.isfile(STEPPER_COFIG_FILE_NAME):
         config = configparser.ConfigParser()
 
@@ -76,6 +122,8 @@ def generateStepperConfig():
 
 
 def generateProgramConfig():
+    """Checks if program config file exists, if not create and fill with default data.
+    """
     if not os.path.isfile(PROGRAM_COFIG_FILE_NAME):
         config = configparser.ConfigParser()
 

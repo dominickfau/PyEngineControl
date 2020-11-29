@@ -15,6 +15,7 @@ folderGenerator.generateFolders()
 configHelper.generateAllConfigs()
 
 #========================================VARIABLES========================================
+configHelper.readConfigSection('Logging.ini', 'Logging')
 BOARD = None
 STEPPER_OBJECT =  None
 PROGRAM_COFIG_FILE_NAME = configHelper.PROGRAM_COFIG_FILE_NAME
@@ -22,6 +23,7 @@ STEPPER_COFIG_FILE_NAME = configHelper.STEPPER_COFIG_FILE_NAME
 
 PROGRAM_LOG_FILE_NAME = configHelper.PROGRAM_LOG_FILE_NAME
 LOGGING_CONFIG = configHelper.readConfigSection(PROGRAM_COFIG_FILE_NAME, 'Logging')
+
 defaultLogVerbosity = 'WARNING'
 try:
     defaultLogVerbosity = LOGGING_CONFIG['log_verbosity']
