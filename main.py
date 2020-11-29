@@ -117,8 +117,8 @@ def attatchSteppers():
 
     rootStepperMenu = Menu(rootMenubar, tearoff=False)
     rootMenubar.add_cascade(label="Steppers", menu=rootStepperMenu)
-    rootStepperMenu.add_command(label="Allow Motion All Steppers", command=CustomStepper.allowAllMotion)
     rootStepperMenu.add_command(label="Force Stop All Steppers", command=CustomStepper.forceStopAllMotion)
+    rootStepperMenu.add_command(label="Allow Motion All Steppers", command=CustomStepper.allowAllMotion)
     rootStepperMenu.add_separator()
     rootStepperMenu.add_command(label="Enable All Steppers", command=CustomStepper.enableAllSteppers)
     rootStepperMenu.add_command(label="Disable All Steppers", command=CustomStepper.disableAllSteppers)
@@ -372,7 +372,7 @@ ProgramLogger.debug(f"[CONFIG] Program Config file contents: {PROGAM_COFIGS}")
 
 # Create csv file for debugging stepper movement times.
 if defaultLogVerbosity == 'DEBUG':
-    headerLine = ['Line_Number', 'Thread_Name', 'Total_Steps_Moved', 'Total_Execution_Time', 'Loop_Execution_Time', 'Tuning_Time', 'Tuning_Constent']
+    headerLine = ['Line_Number', 'Thread_Name', 'Total_Steps_Moved', 'Total_Execution_Time', 'Total_Trasmition_Time', 'Tuning_Time', 'Tuning_Constent', 'Mesured_Pulse_Time']
     debugFileName = "Debug_Movement_Times.csv"
     fullDebugFilePath = folderGenerator.findFullPath('Logs') + debugFileName
     with open(fullDebugFilePath, 'w', newline='') as f:
