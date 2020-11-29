@@ -1,8 +1,17 @@
 import logging
 
-
-#TODO: Add doc string.
 def createLogger(moduleName, logFileName, logVerbosity, logFormat='%(asctime)s  %(name)s - %(levelname)s: %(message)s'):
+    """Create a logging instance and return it.
+
+    Args:
+        moduleName (string): __name__ variable from the calling file.
+        logFileName (string): Full file path to the log file to write to.
+        logVerbosity (string): Valid options are DEBUG, INFO, WARNING, ERROR, CRITICAL
+        logFormat (string, optional): Format string for each line writen to log file. Defaults to '%(asctime)s  %(name)s - %(levelname)s: %(message)s'.
+
+    Returns:
+        object: logging.getLogger() instance.
+    """
     startMessage = "[START] Program started."
     if moduleName == '__main__':
         with open(logFileName, 'a') as logFile:
