@@ -15,7 +15,6 @@ folderGenerator.generateFolders()
 configHelper.generateAllConfigs()
 
 #========================================VARIABLES========================================
-configHelper.readConfigSection('Logging.ini', 'Logging')
 BOARD = None
 STEPPER_OBJECT =  None
 PROGRAM_COFIG_FILE_NAME = configHelper.PROGRAM_COFIG_FILE_NAME
@@ -192,7 +191,7 @@ def connectToBoard():
     global BOARD
     ProgramLogger.info("Connecting to board.")
     try:
-        BOARD = pymata4.Pymata4()
+        BOARD = pymata4.Pymata4(baud_rate=500000)
         totalDigitalPins = len(BOARD.digital_pins)
         totalDAnalogPins = len(BOARD.analog_pins)
         ProgramLogger.info(f"Total Digital Pins: {str(totalDigitalPins)} Total Analog Pins: {str(totalDAnalogPins)}")

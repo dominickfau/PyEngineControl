@@ -57,6 +57,7 @@ class CustomStepper(threading.Thread):
             self.steps_per_rev = int(options['steps_per_rev'])
             self.range_of_motion = float(options['range_of_motion'])
             self.invert_direction = bool(options['invert_direction'])
+            self.invert_enable_pin = bool(options['invert_enable_pin'])
 
             self.arduino_step_pin = int(options['arduino_step_pin'])
             CustomStepper.BOARD.set_pin_mode_digital_output(self.arduino_step_pin)
@@ -83,6 +84,8 @@ class CustomStepper(threading.Thread):
                 raise ValueError(f"Pin {x} has already been used.")
             CustomStepper.TOTAL_PINS_USED.append(x)
 
+        self.disableStepper()
+
     def _run_threads(self):
         self.run_event.set()
 
@@ -104,6 +107,7 @@ class CustomStepper(threading.Thread):
     def forceStopMotion(self):
         self.haltMotion = True
         ProgramLogger.info(f"Stepper: [{self.stepperName}] FORCED STOP.")
+        self.disableStepper()
 
     def allowMotion(self):
         self.haltMotion = False
@@ -112,12 +116,18 @@ class CustomStepper(threading.Thread):
     def enableStepper(self):
         self.lastMovementTime = time.time()
         self.stepperActive = True
-        CustomStepper.BOARD.digital_write(self.arduino_enable_pin, 1)
+        if self.invert_enable_pin:
+            CustomStepper.BOARD.digital_write(self.arduino_enable_pin, 0)
+        else:
+            CustomStepper.BOARD.digital_write(self.arduino_enable_pin, 1)
         ProgramLogger.info(f"Stepper: [{self.stepperName}] ENABELED.")
 
     def disableStepper(self):
         self.stepperActive = False
-        CustomStepper.BOARD.digital_write(self.arduino_enable_pin, 0)
+        if self.invert_enable_pin:
+            CustomStepper.BOARD.digital_write(self.arduino_enable_pin, 1)
+        else:
+            CustomStepper.BOARD.digital_write(self.arduino_enable_pin, 0)
         ProgramLogger.info(f"Stepper: [{self.stepperName}] DISABLED.")
 
     def rotateStepper(self, threadName, direction, numberOfSteps):
