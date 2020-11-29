@@ -45,7 +45,7 @@ STEPPER_OBJECTS = []
 
 #==================================TK ROOT WINDOW SETTUP==================================
 PROGRAM_NAME = codeUtilitys.amendSpacesToString("PyEngineControl")
-PROGRAM_VERSION = "0.0.1-alpha.1"
+PROGRAM_VERSION = "0.0.1-alpha.2"
 SCREEN_WIDTH, SCREEN_HEIGHT = root.winfo_screenwidth(), root.winfo_screenheight()
 ROOT_WIDTH, ROOT_HIGHT = 600, 400
 x = (SCREEN_WIDTH/2) - (ROOT_WIDTH/2)
@@ -67,7 +67,7 @@ def watchDag():
         currentTime = time.time()
         for stepperObject in CustomStepper.STEPPER_OBJECT_LIST:
             if stepperObject.stepperActive and stepperObject.isInMotion == False:
-                if (currentTime - stepperObject.lastMovmentTime) > timeout:
+                if (currentTime - stepperObject.lastMovementTime) > timeout:
                     ProgramLogger.info(f"[WATCH DOG] Stepper: [{stepperObject.stepperName}] timed out.")
                     stepperObject.disableStepper()
 
@@ -117,6 +117,9 @@ def attatchSteppers():
 
     rootStepperMenu = Menu(rootMenubar, tearoff=False)
     rootMenubar.add_cascade(label="Steppers", menu=rootStepperMenu)
+    rootStepperMenu.add_command(label="Allow Motion All Steppers", command=CustomStepper.allowAllMotion)
+    rootStepperMenu.add_command(label="Force Stop All Steppers", command=CustomStepper.forceStopAllMotion)
+    rootStepperMenu.add_separator()
     rootStepperMenu.add_command(label="Enable All Steppers", command=CustomStepper.enableAllSteppers)
     rootStepperMenu.add_command(label="Disable All Steppers", command=CustomStepper.disableAllSteppers)
 
@@ -127,6 +130,9 @@ def attatchSteppers():
             STEPPER_OBJECT = stepperObject
             rootPerStepperMenu = Menu(rootStepperMenu, tearoff=False)
             rootStepperMenu.add_cascade(label=codeUtilitys.amendSpacesToString(stepperObject.stepperName), menu=rootPerStepperMenu)
+            rootPerStepperMenu.add_command(label="Force Stop Stepper", command=lambda x=stepperObject: x.forceStopMotion())
+            rootPerStepperMenu.add_command(label="Allow Stepper Motion", command=lambda x=stepperObject: x.allowMotion())
+            rootPerStepperMenu.add_separator()
             rootPerStepperMenu.add_command(label="Enable Stepper", command=lambda x=stepperObject: x.enableStepper())
             rootPerStepperMenu.add_command(label="Disable Stepper", command=lambda x=stepperObject: x.disableStepper())
             STEPPER_OBJECTS.append(stepperObject)
@@ -253,6 +259,10 @@ def getNewPosition():
             ProgramLogger.error(err, exc_info=True)
             messagebox.showerror(PROGRAM_NAME, err)
             return
+        except customExceptions.MotionNotAllowedError as err:
+            ProgramLogger.error(err)
+            messagebox.showerror(PROGRAM_NAME, err)
+            return
     return
 
 
@@ -302,34 +312,68 @@ def runTest(threadName, stepperObject, fileToOpen):
         for row in csvreader:
             if len(row) != 0:
                 dataRows.append(row)
-
     csvfile.close()
-    ProgramLogger.info(f"[THREAD {threadName}] Total rows to send: {str(len(dataRows) - 1)}")
+
+    ProgramLogger.info(f"[THREAD {threadName}] Total rows to send: {str(len(dataRows) - 1)}. Checking data for non-supported types.")
+    # Check all rows in file.
+    errMsg = False
+    errorRows = []
+    line_num = 1
     for data in dataRows:
         try:
-            # lineNumber = int(data[dataHeader.index('Line')])
-            moveToPos = float(data[dataHeader.index('MoveTo')])
-            timeToHold = float(data[dataHeader.index('HoldFor')])
-            stepperObject.addMoveToQueue(newPosition=moveToPos, holdTime=timeToHold)
+            lineNumber, moveToPos, timeToHold = int(data[dataHeader.index('Line')]), float(data[dataHeader.index('MoveTo')]), float(data[dataHeader.index('HoldFor')])
+            if moveToPos < 0.0 or moveToPos > 100.0:
+                raise customExceptions.OutOfRangeError(f"File: {fileName} Line: {str(line_num)} outside of allowed range 0-100.")
         except ValueError as err:
-            info = f"[FILE] Could not convert some cells in file: [{fileName}]. Please check that each column value type is on the supported types list."
-            ProgramLogger.error(f"[{info}] Error: {err}", exc_info=True)
-            messagebox.showerror(PROGRAM_NAME, info)
-            return
+            errMsg = True
+            msgShort = "Cell value not supported."
+            msgDetail = f"File: [{fileName}] Could not convert cell on Line: {str(line_num)} Msg: {msgShort}"
+            errorRows.append([str(line_num), msgShort])
+            ProgramLogger.error(f"[THREAD {threadName}] [{msgDetail}] Error: {err}", exc_info=True)
         except customExceptions.OutOfRangeError as err:
-            ProgramLogger.error(err, exc_info=True)
+            errMsg = True
+            msgShort = "Cell value out of range 0-100."
+            msgDetail = f"File: [{fileName}] Could not convert cell on Line: {str(line_num)} Msg: {msgShort}"
+            errorRows.append([str(line_num), msgShort])
+            ProgramLogger.error(f"[THREAD {threadName}] [{msgDetail}] Error: {err}", exc_info=True)
+        line_num += 1
+
+    if errMsg:
+        for stepperObject in STEPPER_OBJECTS:
+            stepperObject.forceStopMotion()
+        totalErrors = len(errorRows)
+        separator = ' '
+        delimiter = '\n'
+        msgToShow = f"File: [{fileName}] {str(totalErrors)} rows failed to convert. Check ProgramLog.txt under Data/Logs for more info.\n"
+        s = ""
+        for errorMsg in errorRows:
+            s += separator.join(errorMsg) + delimiter
+
+        ProgramLogger.critical(msgToShow + s.strip())
+        messagebox.showerror(PROGRAM_NAME, msgToShow + s.strip())
+        return
+    # Then add rows to movement queue.
+    for data in dataRows:
+        lineNumber, moveToPos, timeToHold = int(data[dataHeader.index('Line')]), float(data[dataHeader.index('MoveTo')]), float(data[dataHeader.index('HoldFor')])
+        try:
+            stepperObject.addMoveToQueue(newPosition=moveToPos, holdTime=timeToHold)
+        except customExceptions.MotionNotAllowedError as err:
+            for stepperObject in STEPPER_OBJECTS:
+                stepperObject.forceStopMotion()
+            ProgramLogger.error(err)
             messagebox.showerror(PROGRAM_NAME, err)
             return
+    ProgramLogger.info(f"[THREAD {threadName}] Finished reading from file [{fileName}]")
 
 
 #=====================================INITIALIZATION=======================================
 ProgramLogger.debug(f"[CONFIG] Stepper Config file contents: {STEPPER_COFIGS}")
 ProgramLogger.debug(f"[CONFIG] Program Config file contents: {PROGAM_COFIGS}")
 
-# Create csv file for debugging stepper movment times.
+# Create csv file for debugging stepper movement times.
 if defaultLogVerbosity == 'DEBUG':
-    headerLine = ['Total_Execution_Time', 'Loop_Execution_Time', 'Tuning_Time', 'Tuning_Constent']
-    debugFileName = "Debug_Movment_Times.csv"
+    headerLine = ['Line_Number', 'Thread_Name', 'Total_Steps_Moved', 'Total_Execution_Time', 'Loop_Execution_Time', 'Tuning_Time', 'Tuning_Constent']
+    debugFileName = "Debug_Movement_Times.csv"
     fullDebugFilePath = folderGenerator.findFullPath('Logs') + debugFileName
     with open(fullDebugFilePath, 'w', newline='') as f:
         csvwriter = csv.writer(f)

@@ -34,20 +34,23 @@ class CustomStepper(threading.Thread):
         # flag to indicate we are in shutdown mode
         self.shutdown_flag = False
 
+        self.haltMotion = False
+
         self.stepperName = stepperName
         self.currentPosition = 0.0
         self.stepperActive = False
-        self.lastMovmentTime = None
+        self.lastMovementTime = None
         self.isInMotion = False
-        self.movmentQueue = []
+        self.movementQueue = []
         self.startTime = time.time()
+        self.lineCount = 0
 
-        # Start stepper movment thread.
-        threadName = self.stepperName + '_Movment_Queue'
-        self.the_movment_queue_thread = threading.Thread(target=self._movment_queue_thread, args=(threadName,))
-        self.the_movment_queue_thread.daemon = True
-        self.the_movment_queue_thread.name = threadName
-        self.the_movment_queue_thread.start()
+        # Start stepper movement thread.
+        threadName = self.stepperName + '_Movement_Queue'
+        self.the_movement_queue_thread = threading.Thread(target=self._movement_queue_thread, args=(threadName,))
+        self.the_movement_queue_thread.daemon = True
+        self.the_movement_queue_thread.name = threadName
+        self.the_movement_queue_thread.start()
 
         pinsUsed = []
         try:
@@ -95,12 +98,19 @@ class CustomStepper(threading.Thread):
 
         """
         self.shutdown_flag = True
+        self.haltMotion = True
         self._stop_threads()
 
+    def forceStopMotion(self):
+        self.haltMotion = True
+        ProgramLogger.info(f"Stepper: [{self.stepperName}] FORCED STOP.")
 
+    def allowMotion(self):
+        self.haltMotion = False
+        ProgramLogger.info(f"Stepper: [{self.stepperName}] Allowed to move.")
 
     def enableStepper(self):
-        self.lastMovmentTime = time.time()
+        self.lastMovementTime = time.time()
         self.stepperActive = True
         CustomStepper.BOARD.digital_write(self.arduino_enable_pin, 1)
         ProgramLogger.info(f"Stepper: [{self.stepperName}] ENABELED.")
@@ -131,15 +141,16 @@ class CustomStepper(threading.Thread):
         for x in range(numberOfSteps):
             CustomStepper.BOARD.digital_pin_write(self.arduino_step_pin, 1)
             CustomStepper.BOARD.digital_pin_write(self.arduino_step_pin, 0)
-            self.lastMovmentTime = time.time()
+            self.lastMovementTime = time.time()
         timeEndLoop = time.time()
         time.sleep(tuningTime)
         timeEnd = time.time()
 
         if defaultLogVerbosity == 'DEBUG':
-            debugFileName = "Debug_Movment_Times.csv"
+            self.lineCount += 1
+            debugFileName = "Debug_Movement_Times.csv"
             fullDebugFilePath = findFullPath('Logs') + debugFileName
-            dataToWrite = [str(timeEnd - timeStart), str(timeEndLoop - timeStart), str(tuningTime), str(tuningTimeConstent)]
+            dataToWrite = [str(self.lineCount), threadName, str(numberOfSteps), str(timeEnd - timeStart), str(timeEndLoop - timeStart), str(tuningTime), str(tuningTimeConstent)]
             with open(fullDebugFilePath, 'a', newline='') as f:
                 csvwriter = csv.writer(f)
                 csvwriter.writerow(dataToWrite)
@@ -172,16 +183,18 @@ class CustomStepper(threading.Thread):
 
 
     def addMoveToQueue(self, newPosition, holdTime=None):
+        if self.haltMotion == True:
+            raise customExceptions.MotionNotAllowedError(f"Stepper: [{self.stepperName}] is not allowed to move.")
         if newPosition < 0.0 or newPosition > 100.0:
             raise customExceptions.OutOfRangeError(f"Stepper: [{self.stepperName}] new position [{str(newPosition)}] outside of allowed range 0-100.")
         toAdd = [newPosition, holdTime]
-        self.movmentQueue.append(toAdd)
+        self.movementQueue.append(toAdd)
 
 
     @staticmethod
-    def setStepperMovmentSpeed(speed):
+    def setStepperMovementSpeed(speed):
         if not isinstance(speed, float):
-            raise TypeError("Stepper movment speed must be a float type object.")
+            raise TypeError("Stepper movement speed must be a float type object.")
         CustomStepper.MOVMENT_SPEED = speed
 
     @staticmethod
@@ -195,23 +208,32 @@ class CustomStepper(threading.Thread):
             CustomStepper.disableStepper(stepper)
 
 
+    @staticmethod
+    def forceStopAllMotion():
+        for stepper in CustomStepper.STEPPER_OBJECT_LIST:
+            CustomStepper.forceStopMotion(stepper)
+    
+    @staticmethod
+    def allowAllMotion():
+        for stepper in CustomStepper.STEPPER_OBJECT_LIST:
+            CustomStepper.allowMotion(stepper)
 
 
 
 #======================================THREADS==================================
-    def _movment_queue_thread(self, threadName):
+    def _movement_queue_thread(self, threadName):
         """
-        This is a the thread to continuously check for movment requestes.
-        When a movment is in the queue, this commands the stepper to move to each.
+        This is a the thread to continuously check for movement requestes.
+        When a movement is in the queue, this commands the stepper to move to each.
         """
         ProgramLogger.info(f"[THREAD START] Started thread: {threadName}")
         while self.shutdown_flag == False:
-            if len(self.movmentQueue) != 0 and self.isInMotion == False:
+            if len(self.movementQueue) != 0 and self.isInMotion == False and self.haltMotion == False:
                 self.isInMotion = True
-                nextMove = self.movmentQueue.pop(0)
+                nextMove = self.movementQueue.pop(0)
                 waitTime = nextMove[1]
                 nextPosition = nextMove[0]
-                ProgramLogger.debug(f"[THREAD {threadName}] New movment: {str(nextPosition)} Hold Time: {waitTime}")
+                ProgramLogger.debug(f"[THREAD {threadName}] New movement: {str(nextPosition)} Hold Time: {waitTime}")
                 self.moveToPosition(threadName, newPosition=nextPosition)
                 if waitTime != None:
                     ProgramLogger.info(f"[THREAD {threadName}] Holding for: {str(waitTime)} seconds")
@@ -219,3 +241,5 @@ class CustomStepper(threading.Thread):
                     self.isInMotion = False
                 else:
                     self.isInMotion = False
+            elif self.haltMotion == True:
+                self.movementQueue.clear()

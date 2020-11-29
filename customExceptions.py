@@ -9,3 +9,7 @@ class NoSectionError(Exception):
 class OutOfRangeError(Exception):
     """Base class for other exceptions."""
     pass
+
+class MotionNotAllowedError(Exception):
+    """Base class for other exceptions."""
+    pass
