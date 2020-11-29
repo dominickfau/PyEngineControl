@@ -1,18 +1,19 @@
-import  codeUtilitys, time, configHelper, configLogging, threading, customExceptions
+from folderGenerator import findFullPath
+import  codeUtilitys, time, configHelper, configLogging, threading, customExceptions, csv
 
 PROGRAM_LOG_FILE_NAME = configHelper.PROGRAM_LOG_FILE_NAME
 PROGRAM_COFIG_FILE_NAME = configHelper.PROGRAM_COFIG_FILE_NAME
 LOGGING_CONFIG = configHelper.readConfigSection(PROGRAM_COFIG_FILE_NAME, 'Logging')
 defaultLogVerbosity = 'WARNING'
 try:
-    ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, LOGGING_CONFIG['log_verbosity'])
+    defaultLogVerbosity = LOGGING_CONFIG['log_verbosity']
+    ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, defaultLogVerbosity)
 except KeyError:
     ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, defaultLogVerbosity)
     ProgramLogger.warning(f"Config file: {PROGRAM_COFIG_FILE_NAME} missing key: log_verbosity. Defaulting to {defaultLogVerbosity}")
 except ValueError:
     ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, defaultLogVerbosity)
     ProgramLogger.error(f"Config file: {PROGRAM_COFIG_FILE_NAME} has Key: log_verbosity, but Value: {LOGGING_CONFIG['log_verbosity']} is not supported. Defaulting to {defaultLogVerbosity}")
-
 
 class CustomStepper(threading.Thread):
     MOVMENT_SPEED = None
@@ -122,17 +123,31 @@ class CustomStepper(threading.Thread):
         if not self.stepperActive:
             self.enableStepper()
         ProgramLogger.debug(f"[THREAD {threadName}] Commanding Stepper: [{self.stepperName}] to rotate {str(numberOfSteps)} Steps.")
-        tStart = time.time()
-        for x in range(numberOfSteps):
-            CustomStepper.BOARD.digital_write(self.arduino_step_pin, 1)
-            CustomStepper.BOARD.digital_write(self.arduino_step_pin, 0)
-            self.lastMovmentTime = time.time()
-        
-        tEnd = time.time()
-        ProgramLogger.debug(f"[THREAD {threadName}] Stepper: [{self.stepperName}] at commanded position. Execution Time: {str(tEnd - tStart)}")
+        timeStart = time.time()
 
-    def moveToPosition(self, threadName, newPosition, waitTime):
-        self.isInMotion = True
+        #FIXME: Find a better way to wait for serial transmition to finish.
+        tuningTimeConstent = 1515.84615 # approximate max steppes per second.
+        tuningTime = (1 / tuningTimeConstent) * numberOfSteps
+        for x in range(numberOfSteps):
+            CustomStepper.BOARD.digital_pin_write(self.arduino_step_pin, 1)
+            CustomStepper.BOARD.digital_pin_write(self.arduino_step_pin, 0)
+            self.lastMovmentTime = time.time()
+        timeEndLoop = time.time()
+        time.sleep(tuningTime)
+        timeEnd = time.time()
+
+        if defaultLogVerbosity == 'DEBUG':
+            debugFileName = "Debug_Movment_Times.csv"
+            fullDebugFilePath = findFullPath('Logs') + debugFileName
+            dataToWrite = [str(timeEnd - timeStart), str(timeEndLoop - timeStart), str(tuningTime), str(tuningTimeConstent)]
+            with open(fullDebugFilePath, 'a', newline='') as f:
+                csvwriter = csv.writer(f)
+                csvwriter.writerow(dataToWrite)
+            f.close()
+
+        ProgramLogger.debug(f"[THREAD {threadName}] Stepper: [{self.stepperName}] at commanded position.\n\tLoop Execution Time: {str(timeEndLoop - timeStart)} seconds. Total Execution Time: {str(timeEnd - timeStart)} seconds.\n\tTuning Time: {str(tuningTime)} Tuning Constent: {str(tuningTimeConstent)}")
+
+    def moveToPosition(self, threadName, newPosition):
         ProgramLogger.info(f"[THREAD {threadName}] Moving Stepper: [{self.stepperName}] to {str(newPosition)}")
         totalAvailableSteps = self.steps_per_rev * (self.range_of_motion * self.drive_ratio)
         stepsToMove = int(totalAvailableSteps * (abs(newPosition - self.currentPosition) / 100))
@@ -153,12 +168,6 @@ class CustomStepper(threading.Thread):
             return
         self.rotateStepper(threadName, direction, stepsToMove)
         self.currentPosition = newPosition
-        if waitTime != None:
-            ProgramLogger.info(f"[THREAD {threadName}] Holding for: {str(waitTime)} seconds")
-            time.sleep(waitTime)
-            self.isInMotion = False
-        else:
-            self.isInMotion = False
 
 
 
@@ -193,14 +202,20 @@ class CustomStepper(threading.Thread):
     def _movment_queue_thread(self, threadName):
         """
         This is a the thread to continuously check for movment requestes.
+        When a movment is in the queue, this commands the stepper to move to each.
         """
         ProgramLogger.info(f"[THREAD START] Started thread: {threadName}")
         while self.shutdown_flag == False:
             if len(self.movmentQueue) != 0 and self.isInMotion == False:
                 self.isInMotion = True
                 nextMove = self.movmentQueue.pop(0)
-                ProgramLogger.debug(f"[THREAD {threadName}] New movment: {str(nextMove[0])} Hold Time: {nextMove[1]}")
-                self.moveToPosition(threadName, newPosition=nextMove[0], waitTime=nextMove[1])
-                while True:
-                    if not self.isInMotion:
-                        break
+                waitTime = nextMove[1]
+                nextPosition = nextMove[0]
+                ProgramLogger.debug(f"[THREAD {threadName}] New movment: {str(nextPosition)} Hold Time: {waitTime}")
+                self.moveToPosition(threadName, newPosition=nextPosition)
+                if waitTime != None:
+                    ProgramLogger.info(f"[THREAD {threadName}] Holding for: {str(waitTime)} seconds")
+                    time.sleep(waitTime)
+                    self.isInMotion = False
+                else:
+                    self.isInMotion = False

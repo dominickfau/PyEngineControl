@@ -14,7 +14,6 @@ root = Tk()
 folderGenerator.generateFolders()
 configHelper.generateAllConfigs()
 
-
 #========================================VARIABLES========================================
 BOARD = None
 STEPPER_OBJECT =  None
@@ -25,8 +24,8 @@ PROGRAM_LOG_FILE_NAME = configHelper.PROGRAM_LOG_FILE_NAME
 LOGGING_CONFIG = configHelper.readConfigSection(PROGRAM_COFIG_FILE_NAME, 'Logging')
 defaultLogVerbosity = 'WARNING'
 try:
-    ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, LOGGING_CONFIG['log_verbosity'])
     defaultLogVerbosity = LOGGING_CONFIG['log_verbosity']
+    ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, defaultLogVerbosity)
 except KeyError:
     ProgramLogger = configLogging.createLogger(__name__, PROGRAM_LOG_FILE_NAME, defaultLogVerbosity)
     ProgramLogger.warning(f"Config file: {PROGRAM_COFIG_FILE_NAME} missing key: log_verbosity. Defaulting to {defaultLogVerbosity}")
@@ -327,6 +326,16 @@ def runTest(threadName, stepperObject, fileToOpen):
 ProgramLogger.debug(f"[CONFIG] Stepper Config file contents: {STEPPER_COFIGS}")
 ProgramLogger.debug(f"[CONFIG] Program Config file contents: {PROGAM_COFIGS}")
 
+# Create csv file for debugging stepper movment times.
+if defaultLogVerbosity == 'DEBUG':
+    headerLine = ['Total_Execution_Time', 'Loop_Execution_Time', 'Tuning_Time', 'Tuning_Constent']
+    debugFileName = "Debug_Movment_Times.csv"
+    fullDebugFilePath = folderGenerator.findFullPath('Logs') + debugFileName
+    with open(fullDebugFilePath, 'w', newline='') as f:
+        csvwriter = csv.writer(f)
+        # Write Colunm names
+        csvwriter.writerow(headerLine)
+    f.close()
 
 #================================ROOT WINDOW INITIALIZATION=================================
 rootMenubar = Menu(root)
