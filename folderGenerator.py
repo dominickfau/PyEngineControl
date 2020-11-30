@@ -52,7 +52,7 @@ def getFullPath(folder):
 
 def findFullPath(folderToFind):
     """
-        Returns full path to the folder name provided.
+        Returns full path to the folder name provided and ends with /.
         Raises FileNotFoundError if folder not found.
     """
     generateFolders()
