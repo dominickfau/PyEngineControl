@@ -27,6 +27,7 @@ haltMotion = False
 #========================================VARIABLES========================================
 BOARD = None
 STEPPER_OBJECTS =  []
+VALID_RUN_FILE_HEADERS = ['Line']
 
 
 
@@ -240,14 +241,6 @@ def moveStepper(threadName, stepperObject, newPosition):
     stepperObject.currentPosition = newPosition
 
 
-def start_loading_bar_thread(text):
-    global loadingThread
-    loadingThread = threading.Thread(target=LoadingBar, args=(text,))
-    loadingThread.daemon = True
-    loadingThread.name = "LoadingBarWindow"
-    loadingThread.start()
-
-
 def LoadingBar(loadingText):
     global loading
     loading = Toplevel()
@@ -269,6 +262,19 @@ def LoadingBar(loadingText):
     progress.start(interval=10)
 
 
+def updateTemplateFile(fileName):
+    if fileName == 'RunProgram.csv':
+        fullFilePath = folderGenerator.findFullPath('Templates') + fileName
+        with open(fullFilePath, 'w', newline='') as f:
+            csvwriter = csv.writer(f)
+            # Write Colunm names
+            csvwriter.writerow(VALID_RUN_FILE_HEADERS)
+        f.close()
+        ProgramLogger.info(f"Updated template file [{fileName}]")
+    else:
+        ProgramLogger.warning(f"Could not update template file [{fileName}] do not know how to.")
+
+
 def attatchSteppers():
     ProgramLogger.info("Attatching Stepper Motors.")
     global STEPPER_OBJECTS
@@ -276,6 +282,7 @@ def attatchSteppers():
     global settupRunTabRowNum
     global stepperPositionSpinboxs
     global stepperPositionMovingLables
+    global VALID_RUN_FILE_HEADERS
     # global rootMenubar
     # global rootStepperMenu
 
@@ -316,6 +323,8 @@ def attatchSteppers():
             messagebox.showerror(PROGRAM_NAME, info)
             exit()
 
+        VALID_RUN_FILE_HEADERS.append(stepperObject.name)
+
         # Define items on Manual Control Tab
         manualControlTabNameLabel = Label(manualControlTab, text=codeUtilitys.amendSpacesToString(stepperObject.name))
         manualControlTabNameLabel.grid(row=manualControlTabRowNum, column=0)
@@ -350,6 +359,8 @@ def attatchSteppers():
     settupRunTabRunButton.grid(row=settupRunTabRowNum, column=0, columnspan=3)
     settupRunTabRowNum += 1
 
+    VALID_RUN_FILE_HEADERS.append('HoldTime')
+    updateTemplateFile('RunProgram.csv')
 
     ProgramLogger.info(f"Total stepper count: {str(len(STEPPER_OBJECTS))}")
     ProgramLogger.info(f"Total pins used: {str(len(CustomStepper.TOTAL_PINS_USED))}")
@@ -388,7 +399,10 @@ def askToConnect():
         info = "Arduino board is not connected. Would you like to connect now?"
         ProgramLogger.warning(info)
         if messagebox.askyesno(PROGRAM_NAME, info):
-            start_loading_bar_thread("Connecting...")
+            loadingThread = threading.Thread(target=LoadingBar, args=("Connecting...",))
+            loadingThread.daemon = True
+            loadingThread.name = "LoadingBarWindow"
+            loadingThread.start()
 
             connectThread = threading.Thread(target=connectToBoard, daemon=True)
             connectThread.name = "ConnectingThread"
@@ -479,9 +493,66 @@ def addMoveToQueue(stepperObject, newPosition, holdTime=None):
         MOVMENT_QUEUE.append(toAdd)
 
 
+#TODO: Code validateRunFile()
+def validateRunFile(fileToOpen):
+    filePath = fileToOpen
+    fileName = fileToOpen.split('/')[-1]
+    dataHeader = []
+    dataRows = []
+    with open(filePath, 'r') as csvfile:
+        csvreader = csv.reader(csvfile)
+        # extracting field names through first row
+        dataHeader = next(csvreader)
+        ProgramLogger.info(f"[RUN] Headers: {dataHeader}")
+        # extracting each data row one by one
+        for row in csvreader:
+            if len(row) != 0:
+                dataRows.append(row)
+    csvfile.close()
+
+    ProgramLogger.info(f"[RUN] Total rows to send: {str(len(dataRows) - 1)}. Checking data for non-supported types.")
+    # Check all rows in file.
+    errMsg = False
+    errorRows = []
+    line_num = 1
+    for data in dataRows:
+        try:
+            lineNumber, moveToPos, timeToHold = int(data[dataHeader.index('Line')]), float(data[dataHeader.index('MoveTo')]), float(data[dataHeader.index('HoldFor')])
+            if moveToPos < 0.0 or moveToPos > 100.0:
+                raise customExceptions.OutOfRangeError(f"File: {fileName} Line: {str(line_num)} outside of allowed range 0-100.")
+        except ValueError as err:
+            errMsg = True
+            msgShort = "Cell value not supported."
+            msgDetail = f"File: [{fileName}] Could not convert cell on Line: {str(line_num)} Msg: {msgShort}"
+            errorRows.append([str(line_num), msgShort])
+            ProgramLogger.error(f"[THREAD {threadName}] [{msgDetail}] Error: {err}", exc_info=True)
+        except customExceptions.OutOfRangeError as err:
+            errMsg = True
+            msgShort = "Cell value out of range 0-100."
+            msgDetail = f"File: [{fileName}] Could not convert cell on Line: {str(line_num)} Msg: {msgShort}"
+            errorRows.append([str(line_num), msgShort])
+            ProgramLogger.error(f"[THREAD {threadName}] [{msgDetail}] Error: {err}", exc_info=True)
+        line_num += 1
+
+    if errMsg:
+        for stepperObject in STEPPER_OBJECTS:
+            stepperObject.forceStopMotion()
+        totalErrors = len(errorRows)
+        separator = ' '
+        delimiter = '\n'
+        msgToShow = f"File: [{fileName}] {str(totalErrors)} rows failed to convert. Check ProgramLog.txt under Data/Logs for more info.\n"
+        s = ""
+        for errorMsg in errorRows:
+            s += separator.join(errorMsg) + delimiter
+
+        ProgramLogger.critical(msgToShow + s.strip())
+        messagebox.showerror(PROGRAM_NAME, msgToShow + s.strip())
+        return
+
+
 #TODO: Code startRun()
-def startRun():
-    pass
+def startRun(fileToOpen):
+    ProgramLogger.info(f"[RUN] Starting programed routine. Reading file: [{fileName}]")
 
 
 #========================================EVENT METHODS=====================================
