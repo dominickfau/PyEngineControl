@@ -27,6 +27,7 @@ haltMotion = False
 #========================================VARIABLES========================================
 BOARD = None
 STEPPER_OBJECTS =  []
+STEPPER_NAMES_TO_OBJECTS = {}
 VALID_RUN_FILE_HEADERS = ['Line']
 
 
@@ -111,7 +112,7 @@ def _watchDog():
             if stepperObject.stepperActive and stepperObject.isInMotion == False:
                 if (currentTime - stepperObject.lastMovementTime) > timeout:
                     ProgramLogger.info(f"[WATCH DOG] Stepper: [{stepperObject.name}] timed out.")
-                    stepperObject.disableStepper()
+                    # stepperObject.disableStepper()
     ProgramLogger.critical("[WATCH DOG] Shutdown Flag  set to True. Thread will now stop.")
 
 
@@ -121,10 +122,10 @@ def _movementQueue():
     When a movement is in the queue, this commands the stepper to move to each.
     """
     ProgramLogger.info("[THREAD] MovmentQueue thread Running.")
+    global stepperPositionMovingLables
     while SHUTDOWN_FLAG == False:
         if len(MOVMENT_QUEUE) != 0:
             nextMove = MOVMENT_QUEUE.pop(0)
-
             stepperObject = nextMove[0]
             newPosition = float(nextMove[1])
             holdTime = nextMove[2]
@@ -134,9 +135,14 @@ def _movementQueue():
 
             #TODO: Finish _movementQueue
             ProgramLogger.debug(f"[THREAD MovementQueue] Stepper: [{stepperObject.name}] new movement: {str(newPosition)}")
+            stepperObject.isInMotion = True
             moveStepper("MovementQueue", stepperObject, newPosition)
+
+            while stepperObject.isInMotion:
+                pass
             
             if holdTime != None:
+                movingLabel.config(text="Holding...")
                 waitTime = float(holdTime)
                 ProgramLogger.info(f"[THREAD MovementQueue] Holding for: {str(waitTime)} seconds")
                 time.sleep(waitTime)
@@ -178,6 +184,7 @@ def disableStepper(stepperObject):
 
 
 def rotateStepper(threadName, stepperObject, stepsToMove):
+    stepperObject.isInMotion = True
     if stepperObject.moveDirection == 0:
         ProgramLogger.debug(f"[THREAD {threadName}] Setting direction pin: {str(stepperObject.arduino_direction_pin)} LOW.")
         BOARD.digital_write(stepperObject.arduino_direction_pin, 0)
@@ -213,6 +220,7 @@ def rotateStepper(threadName, stepperObject, stepsToMove):
             csvwriter.writerow(dataToWrite)
         f.close()
 
+    stepperObject.isInMotion = False
     ProgramLogger.debug(f"[THREAD {threadName}] Stepper: [{stepperObject.name}] at commanded position.\n\tLoop Execution Time: {str(timeEndLoop - timeStart)} seconds. Total Execution Time: {str(timeEnd - timeStart)} seconds.\n\tTuning Time: {str(tuningTime)} Tuning Constent: {str(tuningTimeConstent)}")
 
 
@@ -236,6 +244,7 @@ def moveStepper(threadName, stepperObject, newPosition):
             stepperObject.moveDirection = 1
     else:
         ProgramLogger.warning(f"[THREAD {threadName}] Stepper: [{stepperObject.name}] already at commanded position.")
+        stepperObject.isInMotion = False
         return
     rotateStepper(threadName, stepperObject, stepsToMove)
     stepperObject.currentPosition = newPosition
@@ -278,6 +287,7 @@ def updateTemplateFile(fileName):
 def attatchSteppers():
     ProgramLogger.info("Attatching Stepper Motors.")
     global STEPPER_OBJECTS
+    global STEPPER_NAMES_TO_OBJECTS
     global manualControlTabRowNum
     global settupRunTabRowNum
     global stepperPositionSpinboxs
@@ -310,6 +320,7 @@ def attatchSteppers():
             # rootPerStepperMenu.add_command(label="Disable Stepper", command=lambda x=stepperObject: x.disableStepper())
 
             STEPPER_OBJECTS.append(stepperObject)
+            STEPPER_NAMES_TO_OBJECTS[stepperObject.name] = stepperObject
         except KeyError as err:
             loading.destroy()
             info = f"Stepper config file Error: {err} From Section: [{stepperSection}]. Please add option then reopen program."
@@ -449,41 +460,41 @@ def getRunFileLocation():
     #TODO: Populate settup run tab treeview after changing file.
 
 
-def validatePositionValue(stepperObject, value):
+def validatePositionValue(value):
     info = None
     try:
         newPosition = float(value)
     except ValueError:
-        info = f"Position value for Stepper: {stepperObject.name} must be a decimal number."
+        info = f"Position value must be a decimal number."
         return info
     if newPosition < 0.0 or newPosition > 100.0:
-        info = f"Position value for Stepper: {stepperObject.name} outside of allowed range 0-100."
+        info = f"Position value outside of allowed range 0-100."
         return info
     return None
 
 
-def validateHoldTimeValue(stepperObject, value):
+def validateHoldTimeValue(value):
     info = None
     try:
         waitTime = float(value)
     except ValueError:
-        info = f"Hold time for Stepper: {stepperObject.name} must be a decimal number."
+        info = f"Hold time must be a decimal number."
         return info
     if waitTime < 0.0:
-        info = f"Hold time for Stepper: {stepperObject.name} MUST be a positive value.."
+        info = f"Hold time MUST be a positive value.."
         return info
     return None
 
 
 def addMoveToQueue(stepperObject, newPosition, holdTime=None):
-        positionError = validatePositionValue(stepperObject, newPosition)
+        positionError = validatePositionValue(newPosition)
         if positionError:
             ProgramLogger.error(positionError)
             messagebox.showerror(PROGRAM_NAME, positionError)
             return
         
         if holdTime:
-            holdTimeError = validateHoldTimeValue(stepperObject, holdTime)
+            holdTimeError = validateHoldTimeValue(holdTime)
             if holdTimeError:
                 ProgramLogger.error(holdTimeError)
                 messagebox.showerror(PROGRAM_NAME, holdTimeError)
@@ -497,6 +508,8 @@ def addMoveToQueue(stepperObject, newPosition, holdTime=None):
 def validateRunFile(fileToOpen):
     filePath = fileToOpen
     fileName = fileToOpen.split('/')[-1]
+    ProgramLogger.info(f"[RUN] Starting programed routine. Reading file: [{fileName}]")
+    ProgramLogger.info(f"[RUN] Running data validation on file {fileName}")
     dataHeader = []
     dataRows = []
     with open(filePath, 'r') as csvfile:
@@ -510,49 +523,95 @@ def validateRunFile(fileToOpen):
                 dataRows.append(row)
     csvfile.close()
 
-    ProgramLogger.info(f"[RUN] Total rows to send: {str(len(dataRows) - 1)}. Checking data for non-supported types.")
-    # Check all rows in file.
-    errMsg = False
-    errorRows = []
-    line_num = 1
-    for data in dataRows:
+    ProgramLogger.info(f"[RUN] Checking {str(len(dataRows) - 1)} rows for non-supported types.")
+    ProgramLogger.info(f"[RUN] Checking column headers.")
+    # Check column headers.
+    if len(dataHeader) > len(VALID_RUN_FILE_HEADERS):
+        error = f"There are too many columns in file {fileName} for the loaded StepperConfig."
+        ProgramLogger.warning(error)
+        raise customExceptions.ValidationError(error)
+    if len(dataHeader) < len(VALID_RUN_FILE_HEADERS):
+        error = f"There are too few columns in file {fileName} for the loaded StepperConfig."
+        ProgramLogger.warning(error)
+        raise customExceptions.ValidationError(error)
+
+    invalidHeaders = []
+    x = 0
+    for item in dataHeader:
         try:
-            lineNumber, moveToPos, timeToHold = int(data[dataHeader.index('Line')]), float(data[dataHeader.index('MoveTo')]), float(data[dataHeader.index('HoldFor')])
-            if moveToPos < 0.0 or moveToPos > 100.0:
-                raise customExceptions.OutOfRangeError(f"File: {fileName} Line: {str(line_num)} outside of allowed range 0-100.")
-        except ValueError as err:
-            errMsg = True
-            msgShort = "Cell value not supported."
-            msgDetail = f"File: [{fileName}] Could not convert cell on Line: {str(line_num)} Msg: {msgShort}"
-            errorRows.append([str(line_num), msgShort])
-            ProgramLogger.error(f"[THREAD {threadName}] [{msgDetail}] Error: {err}", exc_info=True)
-        except customExceptions.OutOfRangeError as err:
-            errMsg = True
-            msgShort = "Cell value out of range 0-100."
-            msgDetail = f"File: [{fileName}] Could not convert cell on Line: {str(line_num)} Msg: {msgShort}"
-            errorRows.append([str(line_num), msgShort])
-            ProgramLogger.error(f"[THREAD {threadName}] [{msgDetail}] Error: {err}", exc_info=True)
-        line_num += 1
+            test = VALID_RUN_FILE_HEADERS.index(item)
+        except ValueError:
+            invalidHeaders.append(item)
+    if len(invalidHeaders) != 0:
+        error = f"Some column names in file {fileName} are not a valid name. Here are the invalid ones: {invalidHeaders}."
+        raise customExceptions.ValidationError(error)
 
-    if errMsg:
-        for stepperObject in STEPPER_OBJECTS:
-            stepperObject.forceStopMotion()
-        totalErrors = len(errorRows)
-        separator = ' '
-        delimiter = '\n'
-        msgToShow = f"File: [{fileName}] {str(totalErrors)} rows failed to convert. Check ProgramLog.txt under Data/Logs for more info.\n"
-        s = ""
-        for errorMsg in errorRows:
-            s += separator.join(errorMsg) + delimiter
+    # Check data rows.
+    ProgramLogger.info(f"[RUN] Checking data rows.")
+    rowNum = 1
+    fileDataToReturn = []
+    for dataRow in dataRows:
+        columnNum = 0
+        nextPosition = {}
+        for item in dataHeader:
+            if item == 'Line':
+                nextPosition['Line'] = dataRow[columnNum]
+            elif item == 'HoldTime':
+                holdTime = dataRow[columnNum]
+                if holdTime != 'None':
+                    error = validateHoldTimeValue(holdTime)
+                    if error:
+                        raise customExceptions.ValidationError(f"Could not parse item on row {str(rowNum)}. Error: {error}")
+                    nextPosition['HoldTime'] = holdTime
+                elif holdTime == 'None':
+                    nextPosition['HoldTime'] = None
+                else:
+                    raise customExceptions.ValidationError(f"Hold time value {str(holdTime)} on row {str(rowNum)} is not supported. Try None?")
+            else:
+                try:
+                    stepperObject = STEPPER_NAMES_TO_OBJECTS[item]
+                except KeyError:
+                    raise customExceptions.ValidationError(f"Could not find stepper with name {item}")
+                nextPosition['StepperToMove'] = stepperObject
 
-        ProgramLogger.critical(msgToShow + s.strip())
-        messagebox.showerror(PROGRAM_NAME, msgToShow + s.strip())
-        return
+                newPosition = dataRow[columnNum]
+                error = validatePositionValue(newPosition)
+                if error:
+                    raise customExceptions.ValidationError(f"Could not parse item on row {str(rowNum)}. Error: {error}")
+                nextPosition['NewPosition'] = newPosition
+                
+            columnNum += 1
+            fileDataToReturn.append(nextPosition)
+        rowNum += 1
+    ProgramLogger.info(f"[RUN] Validation successful.")
+    return fileDataToReturn
+
+    
 
 
 #TODO: Code startRun()
-def startRun(fileToOpen):
-    ProgramLogger.info(f"[RUN] Starting programed routine. Reading file: [{fileName}]")
+def startRun():
+    fileToOpen = settupRunTabFileEntry.get()
+    # {'Line': '1', 'StepperToMove': <CustomStepper(StepperTwo, initial daemon)>, 'HoldTime': None}
+    try:
+        fileData = validateRunFile(fileToOpen)
+    except customExceptions.ValidationError as err:
+        info = f"There was an issue during data validation. See log file for more details.\nError: {err}"
+        ProgramLogger.error(info, exc_info=True)
+        messagebox.showerror(PROGRAM_NAME, info)
+        return
+    ProgramLogger.debug(f"[RUN] Data from validation: {fileData}")
+    ProgramLogger.info(f"[RUN] Adding all data to movement queue.")
+    
+    for move in fileData:
+        ProgramLogger.debug(f"[RUN] Sending move to queue.")
+        addMoveToQueue(stepperObject=move['StepperToMove'], newPosition=move['NewPosition'], holdTime=move['HoldTime'])
+        time.sleep(0.0001)
+        
+
+
+
+
 
 
 #========================================EVENT METHODS=====================================

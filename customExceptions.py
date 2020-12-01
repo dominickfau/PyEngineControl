@@ -13,3 +13,7 @@ class OutOfRangeError(Exception):
 class MotionNotAllowedError(Exception):
     """Base class for other exceptions."""
     pass
+
+class ValidationError(Exception):
+    """Base class for other exceptions."""
+    pass
