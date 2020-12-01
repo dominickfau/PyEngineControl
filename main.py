@@ -687,6 +687,9 @@ rootNoteBook.add(settupRunTab, text="Setup Run")
 settupRunTabFileEntrys = {}
 #TODO: Add tree view to settup run tab.
 
+# settupTabTreeView = ttk.Treeview(settupRunTab, selectmode ='browse')
+# settupTabTreeView.grid(row=20, column=0, columnspan=5)
+
 
 #=========================LOGGING TAB=============================
 loggingTabRowNum = 0
