@@ -19,7 +19,6 @@ class CustomStepper(threading.Thread):
     # Used for global enable/ disable.
     STEPPER_OBJECT_LIST = []
     MOVMENT_SPEED = None
-    BOARD = None
     TOTAL_PINS_USED = []
 
     def __init__(self, stepperName, options):
@@ -51,8 +50,8 @@ class CustomStepper(threading.Thread):
         try:
             self.steps_per_rev = int(options['steps_per_rev'])
             self.range_of_motion = float(options['range_of_motion'])
-            self.invert_direction = bool(options['invert_direction'])
-            self.invert_enable_pin = bool(options['invert_enable_pin'])
+            self.invert_direction = CustomStepper.convertToBool(options['invert_direction'])
+            self.invert_enable_pin = CustomStepper.convertToBool(options['invert_enable_pin'])
             self.arduino_step_pin = int(options['arduino_step_pin'])
             self.arduino_direction_pin = int(options['arduino_direction_pin'])
             self.arduino_enable_pin = int(options['arduino_enable_pin'])
@@ -62,6 +61,8 @@ class CustomStepper(threading.Thread):
             self.pinNumbersUsed.append(self.arduino_enable_pin)
         except KeyError as err:
             raise KeyError(f"Missing required config option Key: {err}")
+        except ValueError as err:
+            raise ValueError(f"Could not convert a value. Error: {err}")
 
         if 'drive_ratio' in options:
             self.drive_ratio = float(options['drive_ratio'])
@@ -122,3 +123,12 @@ class CustomStepper(threading.Thread):
     def allowAllMotion():
         for stepper in CustomStepper.STEPPER_OBJECT_LIST:
             CustomStepper.allowMotion(stepper)
+
+    @staticmethod
+    def convertToBool(string):
+        if string.upper() == 'FALSE':
+            return False
+        elif string.upper() == 'TRUE':
+            return True
+        else:
+            raise ValueError(f"Value {string} not supported.")

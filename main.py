@@ -6,7 +6,6 @@ from tkinter.ttk import Progressbar
 from tkinter import filedialog
 from customStepper import CustomStepper
 from pymata4 import pymata4
-import pandas as pd
 
 import configHelper, configLogging, folderGenerator, codeUtilitys, os.path, time, threading, csv, customExceptions, sys
 
@@ -183,6 +182,7 @@ def disableStepper(stepperObject):
 
 
 def rotateStepper(threadName, stepperObject, stepsToMove):
+    global BOARD
     stepperObject.isInMotion = True
     if stepperObject.moveDirection == 0:
         ProgramLogger.debug(f"[THREAD {threadName}] Setting direction pin: {str(stepperObject.arduino_direction_pin)} LOW.")
@@ -202,8 +202,8 @@ def rotateStepper(threadName, stepperObject, stepsToMove):
     tuningTimeConstent = 1515.84615 # approximate max steppes per second.
     tuningTime = (1 / tuningTimeConstent) * stepsToMove
     for x in range(stepsToMove):
-        BOARD.digital_pin_write(stepperObject.arduino_step_pin, 1)
-        BOARD.digital_pin_write(stepperObject.arduino_step_pin, 0)
+        BOARD.digital_write(stepperObject.arduino_step_pin, 1)
+        BOARD.digital_write(stepperObject.arduino_step_pin, 0)
         stepperObject.lastMovementTime = time.time()
     timeEndLoop = time.time()
     time.sleep(tuningTime)
@@ -427,7 +427,7 @@ def askToConnect():
 
 
 def checkBoardConnection():
-    if CustomStepper.BOARD == None:
+    if BOARD == None:
         return False
     else:
         return True
