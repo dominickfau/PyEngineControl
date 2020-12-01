@@ -27,7 +27,7 @@ haltMotion = False
 BOARD = None
 STEPPER_OBJECTS =  []
 STEPPER_NAMES_TO_OBJECTS = {}
-VALID_RUN_FILE_HEADERS = ['Line']
+VALID_RUN_FILE_HEADERS = None
 
 
 
@@ -55,7 +55,7 @@ if int(LOGGING_CONFIG['log_file_size_limit']) < PROGRAM_LOG_FILE_SIZE:
     f.close()
 
 PROGAM_COFIGS = configHelper.readConfigFile(PROGRAM_COFIG_FILE_NAME)
-STEPPER_COFIGS = configHelper.readConfigFile(STEPPER_COFIG_FILE_NAME)
+STEPPER_COFIGS = None
 
 #==================================TK ROOT WINDOW SETTUP==================================
 PROGRAM_NAME = codeUtilitys.amendSpacesToString("PyEngineControl")
@@ -272,19 +272,6 @@ def LoadingBar(loadingText):
     progress.start(interval=10)
 
 
-def updateTemplateFile(fileName):
-    if fileName == 'RunProgram.csv':
-        fullFilePath = folderGenerator.findFullPath('Templates') + fileName
-        with open(fullFilePath, 'w', newline='') as f:
-            csvwriter = csv.writer(f)
-            # Write Colunm names
-            csvwriter.writerow(VALID_RUN_FILE_HEADERS)
-        f.close()
-        ProgramLogger.info(f"Updated template file [{fileName}]")
-    else:
-        ProgramLogger.warning(f"Could not update template file [{fileName}] do not know how to.")
-
-
 def attatchSteppers():
     ProgramLogger.info("Attatching Stepper Motors.")
     global STEPPER_OBJECTS
@@ -293,7 +280,10 @@ def attatchSteppers():
     global settupRunTabRowNum
     global stepperPositionSpinboxs
     global stepperPositionMovingLables
-    global VALID_RUN_FILE_HEADERS
+    global settupRunTabRunButton
+
+    getUpdatedStepperConfig()
+
     # global rootMenubar
     # global rootStepperMenu
 
@@ -335,8 +325,6 @@ def attatchSteppers():
             messagebox.showerror(PROGRAM_NAME, info)
             exit()
 
-        VALID_RUN_FILE_HEADERS.append(stepperObject.name)
-
         # Define items on Manual Control Tab
         manualControlTabNameLabel = Label(manualControlTab, text=codeUtilitys.amendSpacesToString(stepperObject.name))
         manualControlTabNameLabel.grid(row=manualControlTabRowNum, column=0)
@@ -354,33 +342,15 @@ def attatchSteppers():
         stepperPositionMovingLables[stepperObject] = stepperPositionMovingLabel
         manualControlTabRowNum += 1
 
-    # Define items on Settup Run Tab
-    settupRunTabNameLabel = Label(settupRunTab, text="File To Run")
-    settupRunTabNameLabel.grid(row=settupRunTabRowNum, column=0)
-
-    global settupRunTabFileEntry
-    settupRunTabFileEntry = Entry(settupRunTab, width=75, borderwidth=3)
-    settupRunTabFileEntry.config(state=DISABLED)
-    settupRunTabFileEntry.grid(row=settupRunTabRowNum, column=1)
-    settupRunTabFileEntry.insert(END, "Select File")
-    
-    settupRunTapPickFileButton = Button(settupRunTab, text="Browse", command=getRunFileLocation)
-    settupRunTapPickFileButton.grid(row=settupRunTabRowNum, column=2)
-    settupRunTabRowNum += 1
-
-    settupRunTabRunButton = Button(settupRunTab, text="Run Test", command=startRun)
-    settupRunTabRunButton.grid(row=settupRunTabRowNum, column=0, columnspan=3)
-    settupRunTabRowNum += 1
-
-    VALID_RUN_FILE_HEADERS.append('HoldTime')
-    updateTemplateFile('RunProgram.csv')
-
     ProgramLogger.info(f"Total stepper count: {str(len(STEPPER_OBJECTS))}")
     ProgramLogger.info(f"Total pins used: {str(len(CustomStepper.TOTAL_PINS_USED))}")
     ProgramLogger.info("Finished attatching stepper motors.")
 
     start_movementQueue_tread()
     start_watchDog_tread()
+
+    settupRunTabRunButton['state'] = tk.NORMAL
+    settupRunTabRunButton.config(text="Run Test")
 
     loading.destroy()
 
@@ -438,6 +408,7 @@ def checkBoardConnection():
 
 def getRunFileLocation():
     global settupRunTabFileEntry
+    global settupTabTreeView
     supportedFileTypes = (("CSV", "*.csv"), ("All Files", "*.*"))
     fileLocation = filedialog.askopenfilename(title="Open File", filetypes=supportedFileTypes)
     fileExtention = fileLocation.split('/')[-1].split('.')[-1].lower()
@@ -462,6 +433,16 @@ def getRunFileLocation():
     settupRunTabFileEntry.insert(END, fileLocation)
     settupRunTabFileEntry.config(state=DISABLED)
     #TODO: Populate settup run tab treeview after changing file.
+    try:
+        fileData = validateRunFile(fileLocation, returnDataOnly=True)
+    except customExceptions.ValidationError as err:
+        info = f"Run file failed validation with Error: {err}"
+        ProgramLogger.warning(info)
+        messagebox.showwarning(PROGRAM_NAME, info)
+        return
+    columnHeaders = fileData['Headers']
+    rawData = fileData["RawDataRows"]
+    populateTreeView(settupTabTreeView, columnHeaders, rawData)
 
 
 def validatePositionValue(value):
@@ -508,11 +489,10 @@ def addMoveToQueue(stepperObject, newPosition, holdTime=None):
         MOVMENT_QUEUE.append(toAdd)
 
 
-def validateRunFile(fileToOpen):
+def validateRunFile(fileToOpen, returnDataOnly=False):
     filePath = fileToOpen
     fileName = fileToOpen.split('/')[-1]
-    ProgramLogger.info(f"[RUN] Starting programed routine. Reading file: [{fileName}]")
-    ProgramLogger.info(f"[RUN] Running data validation on file {fileName}")
+    ProgramLogger.info(f"Running data validation on file {fileName}")
     dataHeader = []
     dataRows = []
     with open(filePath, 'r') as csvfile:
@@ -526,8 +506,8 @@ def validateRunFile(fileToOpen):
                 dataRows.append(row)
     csvfile.close()
 
-    ProgramLogger.info(f"[RUN] Checking {str(len(dataRows) - 1)} rows for non-supported types.")
-    ProgramLogger.info(f"[RUN] Checking column headers.")
+    ProgramLogger.info(f"Checking {str(len(dataRows) - 1)} rows for non-supported types.")
+    ProgramLogger.info(f"Checking column headers.")
     # Check column headers.
     if len(dataHeader) > len(VALID_RUN_FILE_HEADERS):
         error = f"There are too many columns in file {fileName} for the loaded StepperConfig."
@@ -550,54 +530,62 @@ def validateRunFile(fileToOpen):
         raise customExceptions.ValidationError(error)
 
     # Check data rows.
-    ProgramLogger.info(f"[RUN] Checking data rows.")
+    ProgramLogger.info(f"Checking data rows.")
     rowNum = 1
-    fileDataToReturn = []
-    for dataRow in dataRows:
-        columnNum = 0
-        nextPosition = {}
-        toMove = []
-        for item in dataHeader:
-            if item == 'Line':
-                nextPosition['Line'] = dataRow[columnNum]
-            elif item == 'HoldTime':
-                holdTime = dataRow[columnNum]
-                if holdTime != 'None':
-                    error = validateHoldTimeValue(holdTime)
+    fileDataToReturn = {}
+    fileDataToReturn['Headers'] = dataHeader
+    fileDataToReturn['RawDataRows'] = dataRows
+    fileDataToReturn['ParsedData'] = []
+
+    if not returnDataOnly:
+        for dataRow in dataRows:
+            columnNum = 0
+            nextPosition = {}
+            toMove = []
+            for item in dataHeader:
+                if item == 'Line':
+                    nextPosition['Line'] = dataRow[columnNum]
+                elif item == 'HoldTime':
+                    holdTime = dataRow[columnNum]
+                    if holdTime != 'None':
+                        error = validateHoldTimeValue(holdTime)
+                        if error:
+                            raise customExceptions.ValidationError(f"Could not parse item on row {str(rowNum)}. Error: {error}")
+                        nextPosition['HoldTime'] = holdTime
+                    elif holdTime == 'None':
+                        nextPosition['HoldTime'] = None
+                    else:
+                        raise customExceptions.ValidationError(f"Hold time value {str(holdTime)} on row {str(rowNum)} is not supported. Try None?")
+                else:
+                    try:
+                        stepperObject = STEPPER_NAMES_TO_OBJECTS[item]
+                    except KeyError:
+                        raise customExceptions.ValidationError(f"Could not find stepper with name {item}")
+                    newPosition = dataRow[columnNum]
+                    error = validatePositionValue(newPosition)
                     if error:
                         raise customExceptions.ValidationError(f"Could not parse item on row {str(rowNum)}. Error: {error}")
-                    nextPosition['HoldTime'] = holdTime
-                elif holdTime == 'None':
-                    nextPosition['HoldTime'] = None
-                else:
-                    raise customExceptions.ValidationError(f"Hold time value {str(holdTime)} on row {str(rowNum)} is not supported. Try None?")
-            else:
-                try:
-                    stepperObject = STEPPER_NAMES_TO_OBJECTS[item]
-                except KeyError:
-                    raise customExceptions.ValidationError(f"Could not find stepper with name {item}")
-                newPosition = dataRow[columnNum]
-                error = validatePositionValue(newPosition)
-                if error:
-                    raise customExceptions.ValidationError(f"Could not parse item on row {str(rowNum)}. Error: {error}")
-                toMove.append([stepperObject, newPosition])
-                
-            columnNum += 1
-        nextPosition['Steppers'] = toMove
-        rowNum += 1
-        fileDataToReturn.append(nextPosition)
-    ProgramLogger.info(f"[RUN] Validation successful.")
+                    toMove.append([stepperObject, newPosition])
+                    
+                columnNum += 1
+            nextPosition['Steppers'] = toMove
+            rowNum += 1
+            fileDataToReturn['ParsedData'].append(nextPosition)
+        ProgramLogger.info(f"Validation successful.")
+    else:
+        ProgramLogger.warning("returnDataOnly set Ture. Only columns where checked.")
     return fileDataToReturn
 
     
 
 
 def startRun():
+    ProgramLogger.info(f"[RUN] Starting programed routine.")
     fileToOpen = settupRunTabFileEntry.get()
     try:
-        fileData = validateRunFile(fileToOpen)
+        fileData = validateRunFile(fileToOpen)['ParsedData']
     except customExceptions.ValidationError as err:
-        info = f"There was an issue during data validation. See log file for more details.\nError: {err}"
+        info = f"Run file failed validation with Error: {err}"
         ProgramLogger.error(info, exc_info=True)
         messagebox.showerror(PROGRAM_NAME, info)
         return
@@ -612,12 +600,65 @@ def startRun():
             stepper = item[0]
             value = item[1]
             addMoveToQueue(stepperObject=stepper, newPosition=value, holdTime=holdTime)
-        
+    
+
+def updateTemplateFile(fileName):
+    global VALID_RUN_FILE_HEADERS
+    if fileName == 'RunProgram.csv':
+        fullFilePath = folderGenerator.findFullPath('Templates') + fileName
+        with open(fullFilePath, 'w', newline='') as f:
+            csvwriter = csv.writer(f)
+            # Write Colunm names
+            csvwriter.writerow(VALID_RUN_FILE_HEADERS)
+        f.close()
+        ProgramLogger.info(f"Updated template file [{fileName}]")
+    else:
+        ProgramLogger.warning(f"Could not update template file [{fileName}] do not know how to.")
 
 
+def clearTreeView(treeViewObject):
+    ProgramLogger.info("Clearing treeVew.")
+    treeViewObject.delete(*treeViewObject.get_children())
+    return
 
 
+def populateTreeView(treeViewObject, columnHeaders, dataRows):
+    #FIXME: Get all columns to auto resize. First column empty?
+    if not isinstance(columnHeaders, list):
+        raise TypeError("column headers must be a list object.")
+    if not isinstance(dataRows, list):
+        raise TypeError("data rows must be a list.")
 
+    clearTreeView(treeViewObject)
+    ProgramLogger.info("Repopulating treeVew.")
+    treeViewObject['column'] = columnHeaders
+    for header in treeViewObject['column']:
+        treeViewObject.heading(header, text=header)
+    for row in dataRows:
+        treeViewObject.insert('', 'end', values=row)
+    return
+
+
+def updateValidCsvHeaders():
+    ProgramLogger.info("Updating valid run file headers.")
+    global VALID_RUN_FILE_HEADERS
+    # Set default columns
+    VALID_RUN_FILE_HEADERS = ['Line', 'HoldTime']
+    stepperConfigFileData = configHelper.readConfigFile(STEPPER_COFIG_FILE_NAME)
+    for section in stepperConfigFileData:
+        VALID_RUN_FILE_HEADERS.append(section)
+
+    updateTemplateFile('RunProgram.csv')
+    return
+
+
+def getUpdatedStepperConfig():
+    ProgramLogger.info("Getting updated StepperConfig.")
+    global STEPPER_COFIGS
+    STEPPER_COFIGS = configHelper.readConfigFile(STEPPER_COFIG_FILE_NAME)
+    ProgramLogger.debug(f"[CONFIG] Stepper Config file contents: {STEPPER_COFIGS}")
+    updateValidCsvHeaders()
+    return
 
 #========================================EVENT METHODS=====================================
 def getStepperSpinboxValue_onEvent(event):
@@ -632,6 +673,8 @@ def getStepperSpinboxValue_onButtonClick(stepperObject, spinBoxObject):
 
 
 #=====================================INITIALIZATION=======================================
+getUpdatedStepperConfig()
+
 the_movmentQueue_thread = threading.Thread(target=_movementQueue)
 the_movmentQueue_thread.daemon = True
 the_movmentQueue_thread.name = "MovementQueue"
@@ -640,7 +683,6 @@ the_watchDog_thread = threading.Thread(target=_watchDog)
 the_watchDog_thread.daemon = True
 the_watchDog_thread.name = "WatchDog"
 
-ProgramLogger.debug(f"[CONFIG] Stepper Config file contents: {STEPPER_COFIGS}")
 ProgramLogger.debug(f"[CONFIG] Program Config file contents: {PROGAM_COFIGS}")
 
 # Create csv file for debugging stepper movement times.
@@ -663,7 +705,9 @@ rootArduinoMenu = Menu(rootMenubar, tearoff=False)
 rootMenubar.add_cascade(label="File", menu=rootFilemenu)
 rootMenubar.add_cascade(label="Arduino", menu=rootArduinoMenu)
 
+rootFilemenu.add_command(label="Update Stepper Config", command=getUpdatedStepperConfig)
 rootFilemenu.add_command(label="Exit", command=Exit)
+
 rootArduinoMenu.add_command(label="Connect", command=askToConnect)
 
 rootNoteBook = ttk.Notebook(root)
@@ -687,8 +731,26 @@ rootNoteBook.add(settupRunTab, text="Setup Run")
 settupRunTabFileEntrys = {}
 #TODO: Add tree view to settup run tab.
 
-# settupTabTreeView = ttk.Treeview(settupRunTab, selectmode ='browse')
-# settupTabTreeView.grid(row=20, column=0, columnspan=5)
+settupRunTabNameLabel = Label(settupRunTab, text="File To Run")
+settupRunTabNameLabel.grid(row=settupRunTabRowNum, column=0, padx=3)
+
+settupRunTabFileEntry = Entry(settupRunTab, width=75, borderwidth=3)
+settupRunTabFileEntry.config(state=DISABLED)
+settupRunTabFileEntry.grid(row=settupRunTabRowNum, column=1, padx=3, pady=3)
+settupRunTabFileEntry.insert(END, "Select File")
+
+settupRunTapPickFileButton = Button(settupRunTab, text="Browse", command=getRunFileLocation)
+settupRunTapPickFileButton.grid(row=settupRunTabRowNum, column=2, padx=3, pady=3)
+settupRunTabRowNum += 1
+
+global settupRunTabRunButton
+settupRunTabRunButton = Button(settupRunTab, text="Not Connected", command=startRun)
+settupRunTabRunButton.grid(row=settupRunTabRowNum, column=0, columnspan=3, pady=3)
+settupRunTabRunButton['state'] = tk.DISABLED
+settupRunTabRowNum += 1
+
+settupTabTreeView = ttk.Treeview(settupRunTab, selectmode ='browse')
+settupTabTreeView.grid(row=settupRunTabRowNum, column=0, columnspan=5, padx=3, pady=3)
 
 
 #=========================LOGGING TAB=============================
