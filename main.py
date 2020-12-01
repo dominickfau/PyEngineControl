@@ -202,6 +202,7 @@ def rotateStepper(threadName, stepperObject, stepsToMove):
     tuningTimeConstent = 1515.84615 # approximate max steppes per second.
     tuningTime = (1 / tuningTimeConstent) * stepsToMove
     for x in range(stepsToMove):
+        #FIXME: Debug why pin state is not changing in the right way.
         BOARD.digital_write(stepperObject.arduino_step_pin, 1)
         BOARD.digital_write(stepperObject.arduino_step_pin, 0)
         stepperObject.lastMovementTime = time.time()
@@ -389,9 +390,11 @@ def connectToBoard():
     global BOARD
     ProgramLogger.info("Connecting to board.")
     try:
+        #TODO: Document connecting to an Arduino Due.
         BOARD = pymata4.Pymata4()
         ProgramLogger.info(f"Total Digital Pins: {str(len(BOARD.digital_pins))} Total Analog Pins: {str(len(BOARD.analog_pins))}")
     except AttributeError:
+        #TODO: Check if borad is an Arduino Due.
         loading.destroy()
         info = "Could not connect to arduino board. Is it pluged in? Reconnect the arduino USB cable, then try again. Or check that the arduino board is assigned a COM port in Device Manager."
         ProgramLogger.critical(info, exc_info=True)
@@ -505,7 +508,6 @@ def addMoveToQueue(stepperObject, newPosition, holdTime=None):
         MOVMENT_QUEUE.append(toAdd)
 
 
-#TODO: Code validateRunFile()
 def validateRunFile(fileToOpen):
     filePath = fileToOpen
     fileName = fileToOpen.split('/')[-1]
@@ -590,10 +592,8 @@ def validateRunFile(fileToOpen):
     
 
 
-#TODO: Code startRun()
 def startRun():
     fileToOpen = settupRunTabFileEntry.get()
-    # {'Line': '1', 'ToMove': <CustomStepper>,'NewPosition': '10.0' , 'HoldTime': None}
     try:
         fileData = validateRunFile(fileToOpen)
     except customExceptions.ValidationError as err:
