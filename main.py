@@ -109,10 +109,10 @@ def _watchDog():
         time.sleep(WATCH_DOG_TUNING_TIME)
         currentTime = time.time()
         for stepperObject in STEPPER_OBJECTS:
-            if stepperObject.stepperActive and stepperObject.isInMotion == False:
+            if stepperObject.stepperActive and  not stepperObject.isInMotion:
                 if (currentTime - stepperObject.lastMovementTime) > timeout:
                     ProgramLogger.info(f"[WATCH DOG] Stepper: [{stepperObject.name}] timed out.")
-                    # stepperObject.disableStepper()
+                    disableStepper(stepperObject)
     ProgramLogger.critical("[WATCH DOG] Shutdown Flag  set to True. Thread will now stop.")
 
 
@@ -135,7 +135,6 @@ def _movementQueue():
 
             #TODO: Finish _movementQueue
             ProgramLogger.debug(f"[THREAD MovementQueue] Stepper: [{stepperObject.name}] new movement: {str(newPosition)}")
-            stepperObject.isInMotion = True
             moveStepper("MovementQueue", stepperObject, newPosition)
 
             while stepperObject.isInMotion:
@@ -246,6 +245,7 @@ def moveStepper(threadName, stepperObject, newPosition):
         ProgramLogger.warning(f"[THREAD {threadName}] Stepper: [{stepperObject.name}] already at commanded position.")
         stepperObject.isInMotion = False
         return
+    stepperObject.isInMotion = True
     rotateStepper(threadName, stepperObject, stepsToMove)
     stepperObject.currentPosition = newPosition
 
@@ -347,6 +347,7 @@ def attatchSteppers():
         stepperPositionButton = Button(manualControlTab, text="Add Move To Queue", command=lambda x=stepperObject, y=stepperPositionSpinbox: getStepperSpinboxValue_onButtonClick(stepperObject=x, spinBoxObject=y))
         stepperPositionButton.grid(row=manualControlTabRowNum, column=2)
 
+        #TODO: Add another label before this to show if enabled.
         stepperPositionMovingLabel = Label(manualControlTab, text="")
         stepperPositionMovingLabel.grid(row=manualControlTabRowNum, column=3, padx=5)
         stepperPositionMovingLables[stepperObject] = stepperPositionMovingLabel
@@ -553,6 +554,7 @@ def validateRunFile(fileToOpen):
     for dataRow in dataRows:
         columnNum = 0
         nextPosition = {}
+        toMove = []
         for item in dataHeader:
             if item == 'Line':
                 nextPosition['Line'] = dataRow[columnNum]
@@ -572,17 +574,16 @@ def validateRunFile(fileToOpen):
                     stepperObject = STEPPER_NAMES_TO_OBJECTS[item]
                 except KeyError:
                     raise customExceptions.ValidationError(f"Could not find stepper with name {item}")
-                nextPosition['StepperToMove'] = stepperObject
-
                 newPosition = dataRow[columnNum]
                 error = validatePositionValue(newPosition)
                 if error:
                     raise customExceptions.ValidationError(f"Could not parse item on row {str(rowNum)}. Error: {error}")
-                nextPosition['NewPosition'] = newPosition
+                toMove.append([stepperObject, newPosition])
                 
             columnNum += 1
-            fileDataToReturn.append(nextPosition)
+        nextPosition['Steppers'] = toMove
         rowNum += 1
+        fileDataToReturn.append(nextPosition)
     ProgramLogger.info(f"[RUN] Validation successful.")
     return fileDataToReturn
 
@@ -592,7 +593,7 @@ def validateRunFile(fileToOpen):
 #TODO: Code startRun()
 def startRun():
     fileToOpen = settupRunTabFileEntry.get()
-    # {'Line': '1', 'StepperToMove': <CustomStepper(StepperTwo, initial daemon)>, 'HoldTime': None}
+    # {'Line': '1', 'ToMove': <CustomStepper>,'NewPosition': '10.0' , 'HoldTime': None}
     try:
         fileData = validateRunFile(fileToOpen)
     except customExceptions.ValidationError as err:
@@ -605,8 +606,12 @@ def startRun():
     
     for move in fileData:
         ProgramLogger.debug(f"[RUN] Sending move to queue.")
-        addMoveToQueue(stepperObject=move['StepperToMove'], newPosition=move['NewPosition'], holdTime=move['HoldTime'])
-        time.sleep(0.0001)
+        lineNumber = move['Line']
+        holdTime = move['HoldTime']
+        for item in move['Steppers']:
+            stepper = item[0]
+            value = item[1]
+            addMoveToQueue(stepperObject=stepper, newPosition=value, holdTime=holdTime)
         
 
 
