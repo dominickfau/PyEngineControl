@@ -1,4 +1,4 @@
-# Stepper config file settup
+# Stepper config file setup
 
 ### Valid config sections.
 Below is the structure requiered for each stepper connected to the arduino. The parameter order does not matter.

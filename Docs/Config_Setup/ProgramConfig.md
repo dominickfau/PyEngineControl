@@ -1,4 +1,4 @@
-# Program config file settup
+# Program config file setup
 
 ### Valid config sections.
 The parameter order does not matter.
